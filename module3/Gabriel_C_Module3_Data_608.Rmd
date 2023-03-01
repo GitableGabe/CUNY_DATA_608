@@ -1,0 +1,150 @@
+---
+title: "R Notebook"
+author: "Gabriel Campos"
+date: "`r format(Sys.Date(), '%B %d %Y')`"
+runtime: shiny
+output:
+  html_document: default
+  html_notebook: default
+  pdf_document: default
+---
+
+```{r, message=FALSE}
+# Libraries
+library(ggplot2)
+library(dplyr)
+library(shiny)
+```
+
+# Module 3
+
+I have provided you with data about mortality from all 50 states and the District of Columbia.
+
+Please access it at [https://github.com/charleyferrari/CUNY_DATA608/tree/master/module3/data](https://github.com/GitableGabe/CUNY_DATA_608/tree/master/module3/data)
+
+You are invited to gather more data from our provider, [the CDC WONDER system](https://wonder.cdc.gov/ucd-icd10.html).
+
+* This assignment must be done in R. It must be done using the ‘shiny’ package.
+* It is recommended you use an R package that supports interactive graphing such as
+plotly, or vegalite, but this is not required.
+* Your apps must be deployed, I won’t be accepting raw files. Luckily, you can pretty
+easily deploy apps with a free account at shinyapps.io
+
+## Shiny Apps Examples
+
+```{r}
+#runApp("Sample Apps/ggplot-reactive.R")
+```
+
+```{r}
+#runApp("Sample Apps/ggplot-simple")
+```
+
+```{r}
+#runApp("Sample Apps/ggplot-simplest")
+```
+
+```{r}
+#runApp("Sample Apps/plotly-simple")
+```
+
+## Import Relevant Data
+
+```{r}
+
+cdc <- read.csv("data/cleaned-cdc-mortality-1999-2010-2.csv", header= TRUE)
+
+```
+
+~/DATA608/CUNY_DATA_608/module3/data
+
+## Shiny template reference
+
+```{r, echo=FALSE}
+# # Define UI for app that draws a histogram ----
+# ui <- fluidPage(
+#   # App title ----
+#   titlePanel("Hello Shiny!"),
+#   # Sidebar layout with input and output definitions ----
+#   sidebarLayout(
+#     # Sidebar panel for inputs ----
+#     sidebarPanel(
+#       # Input: Slider for the number of bins ----
+#       sliderInput(inputId = "bins",
+#                   label = "Number of bins:",
+#                   min = 1,
+#                   max = 50,
+#                   value = 30)
+#     ),
+# 
+#     # Main panel for displaying outputs ----
+#     mainPanel(
+#       # Output: Histogram ----
+#       plotOutput(outputId = "distPlot")
+#     )
+#   )
+# )
+
+# # Define server logic ----
+# server <- function(input, output) {
+#   
+# }
+# 
+# # Run the app ----
+# shinyApp(ui = ui, server = server)
+```
+
+```{r, echo=FALSE,out.width="49%", out.height="20%",fig.cap="caption",fig.show='hold',fig.align='center'}
+knitr::include_graphics(c("fluidpage.png","function.png","run.png"))
+```
+
+
+
+
+
+## Question 1:
+    As a researcher, you frequently compare mortality rates from particular causes across
+    different States. You need a visualization that will let you see (for 2010 only) the
+    crude mortality rate, across all States, from one cause (for example, Neoplasms, which
+    are effectively cancers). Create a visualization that allows you to rank States by 
+    crude mortality for each cause of death.
+    
+    
+```{r}
+ui <- fluidPage(
+  titlePanel("Crude Mortality Rate Across All States by Causes"), 
+      sidebarLayout(
+        selectInput("select", label = h3("Causes of Death"), 
+                    choices = cdc$ICD.Chapter, 
+                    selected = 1,
+                    width = '100%'),
+        
+        mainPanel(
+           plotOutput("distPlot")
+        )
+    )
+)
+
+server <- function(input, output) {
+    output$distPlot <- renderPlot({
+      ggplot(cdc[cdc$ICD.Chapter == input$select,] , aes(x = reorder(State, Crude.Rate), y = Crude.Rate)) +
+        labs(x = "State", y = "Crude Mortality Rate") +  
+        geom_bar(stat = "identity") +
+        coord_flip() +
+        theme_minimal()
+    }, width = 'auto', height = 'auto')
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+
+## Question 2:
+    Often you are asked whether particular States are improving their mortality rates (per
+    cause) faster than, or slower than, the national average. Create a visualization that
+    lets your clients see this for themselves for one cause of death at the time. Keep in
+    mind that the national average should be weighted by the national population.
+
+
+
+
