@@ -110,8 +110,8 @@ knitr::include_graphics(c("fluidpage.png","function.png","run.png"))
     are effectively cancers). Create a visualization that allows you to rank States by 
     crude mortality for each cause of death.
     
-```{r}
-ggplot(cdc, aes(x = reorder(State, Crude_Rate), y = Crude_Rate)) +
+```{r, include=FALSE}
+ggplot(cdc%>%filter(Year==2010), aes(x = reorder(State, Crude_Rate), y = Crude_Rate)) +
         labs(x = "State", y = "Crude Mortality Rate") +  
         geom_bar(stat = "identity") +
         coord_flip()
@@ -134,6 +134,7 @@ ui <- fluidPage(
         ),
         
         mainPanel(
+         # img(src = "CDC Logo.png"),
            plotOutput(outputId ="distPlot")
         )
     )
@@ -141,7 +142,7 @@ ui <- fluidPage(
 
 server <- function(input, output) {
     output$distPlot <- renderPlot({
-      ggplot(cdc[cdc$Chapter == input$choose ,] , aes(x = reorder(State, Crude_Rate), y = Crude_Rate)) +
+      ggplot(cdc[cdc$Chapter == input$choose ,]%>%filter(Year==2010) , aes(x = reorder(State, Crude_Rate), y = Crude_Rate)) +
         labs(x = "State", y = "Crude Mortality Rate") +  
         geom_bar(stat = "identity") +
         coord_flip()
@@ -158,6 +159,74 @@ shinyApp(ui = ui, server = server)
     lets your clients see this for themselves for one cause of death at the time. Keep in
     mind that the national average should be weighted by the national population.
 
+```{r}
+cdc %>% 
+            group_by(Year, Chapter) %>%
+            mutate(N_Population = sum(Population),
+                   N_Count = sum(Deaths), 
+                   N_Crude_Rate = 10^5*(N_Count/N_Population)) %>% 
+            group_by(Year, Chapter, State) %>%
+            mutate(S_Count=sum(Deaths),
+                   S_Crude_Rate=10^5*(S_Count/Population)) %>%
+            select(Chapter, State, Year, N_Crude_Rate, S_Crude_Rate) %>% 
+            filter(Chapter == "Certain infectious and parasitic diseases", State == "AL") %>% 
+            ggplot() +
+            geom_bar(aes(x = Year, weight = S_Crude_Rate)) +
+            labs(x = "State", y = "Crude Mortality Rate") + 
+            geom_line(aes(x = Year, y = N_Crude_Rate, linetype = "National Average"), col = "red", lwd = 1) +
+            scale_linetype(name = NULL) +
+            theme_minimal()
+```
 
+
+
+```{r}
+ui <- fluidPage(
+    titlePanel("Crude Mortality Rate Across All States Vs National Average"), 
+    sidebarLayout( 
+      sidebarPanel(
+        selectInput("choose state", label = strong("State"), 
+                    choices = levels(as.factor(cdc$State)), 
+                    selected = 1),
+    
+        selectInput("Choose Cause of Death", label = strong("Cause of Death"), 
+                    choices = levels(as.factor(cdc$Chapter)), 
+                    selected = 1),
+
+        width = "auto"
+        ),
+        
+        mainPanel(
+            plotOutput("distPlot")
+        )
+    )
+    )
+
+
+server <- function(input, output) {
+    output$distPlot <- renderPlot({
+        cdc %>% 
+            group_by(Year, Chapter) %>%
+            mutate(N_Population = sum(Population),
+                   N_Count = sum(Deaths), 
+                   N_Crude_Rate = 10^5*(N_Count/N_Population)) %>% 
+            group_by(Year, Chapter, State) %>%
+            mutate(S_Count=sum(Deaths),
+                   S_Crude_Rate=10^5*(S_Count/Population)) %>%
+            select(Chapter, State, Year, N_Crude_Rate, S_Crude_Rate) %>% 
+            filter(Chapter == input$select2, State == input$select1) %>% 
+            ggplot() +
+            geom_bar(aes(x = Year, weight = S_Crude_Rate)) +
+            labs(x = "State", y = "Crude Mortality Rate") + 
+            geom_line(aes(x = Year, y = N_Crude_Rate, linetype = "National Average"), col = "red", lwd = 1) +
+            scale_linetype(name = NULL) +
+            theme_minimal()
+        }
+    )
+    }
+
+
+shinyApp(ui = ui, server = server)
+```
 
 
