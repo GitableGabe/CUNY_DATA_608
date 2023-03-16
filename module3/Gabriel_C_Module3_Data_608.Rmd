@@ -53,6 +53,7 @@ easily deploy apps with a free account at shinyapps.io
 ```{r}
 
 cdc <- read.csv("data/cleaned-cdc-mortality-1999-2010-2.csv", header= TRUE)
+colnames(cdc) <- c('Chapter','State','Year','Deaths','Population','Crude_Rate')
 
 ```
 
@@ -109,29 +110,41 @@ knitr::include_graphics(c("fluidpage.png","function.png","run.png"))
     are effectively cancers). Create a visualization that allows you to rank States by 
     crude mortality for each cause of death.
     
+```{r}
+ggplot(cdc, aes(x = reorder(State, Crude_Rate), y = Crude_Rate)) +
+        labs(x = "State", y = "Crude Mortality Rate") +  
+        geom_bar(stat = "identity") +
+        coord_flip()
+```
+    
+    
     
 ```{r}
+
+#https://shiny.rstudio.com/tutorial/written-tutorial/lesson2/
+
 ui <- fluidPage(
-  titlePanel("Crude Mortality Rate Across All States by Causes"), 
-      sidebarLayout(
-        selectInput("select", label = h3("Causes of Death"), 
-                    choices = cdc$ICD.Chapter, 
+  titlePanel("Crude Mortality Rate Causes By State"), 
+      sidebarLayout(position="right",
+        sidebarPanel(
+        selectInput("choose" ,h5(strong("Select Causes of Death")), 
+                    choices = cdc$Chapter, 
                     selected = 1,
-                    width = '100%'),
+                    width = '100%')
+        ),
         
         mainPanel(
-           plotOutput("distPlot")
+           plotOutput(outputId ="distPlot")
         )
     )
 )
 
 server <- function(input, output) {
     output$distPlot <- renderPlot({
-      ggplot(cdc[cdc$ICD.Chapter == input$select,] , aes(x = reorder(State, Crude.Rate), y = Crude.Rate)) +
+      ggplot(cdc[cdc$Chapter == input$choose ,] , aes(x = reorder(State, Crude_Rate), y = Crude_Rate)) +
         labs(x = "State", y = "Crude Mortality Rate") +  
         geom_bar(stat = "identity") +
-        coord_flip() +
-        theme_minimal()
+        coord_flip()
     }, width = 'auto', height = 'auto')
 }
 
