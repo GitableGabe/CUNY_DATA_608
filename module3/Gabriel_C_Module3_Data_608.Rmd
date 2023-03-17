@@ -14,6 +14,7 @@ output:
 library(ggplot2)
 library(dplyr)
 library(shiny)
+library(kableExtra)
 ```
 
 # Module 3
@@ -160,36 +161,27 @@ shinyApp(ui = ui, server = server)
     mind that the national average should be weighted by the national population.
 
 ```{r}
-cdc %>% 
-            group_by(Year, Chapter) %>%
-            mutate(N_Population = sum(Population),
-                   N_Count = sum(Deaths), 
-                   N_Crude_Rate = 10^5*(N_Count/N_Population)) %>% 
-            group_by(Year, Chapter, State) %>%
-            mutate(S_Count=sum(Deaths),
-                   S_Crude_Rate=10^5*(S_Count/Population)) %>%
-            select(Chapter, State, Year, N_Crude_Rate, S_Crude_Rate) %>% 
-            filter(Chapter == "Certain infectious and parasitic diseases", State == "AL") %>% 
-            ggplot() +
-            geom_bar(aes(x = Year, weight = S_Crude_Rate)) +
-            labs(x = "State", y = "Crude Mortality Rate") + 
-            geom_line(aes(x = Year, y = N_Crude_Rate, linetype = "National Average"), col = "red", lwd = 1) +
-            scale_linetype(name = NULL) +
-            theme_minimal()
+#Calculate the National Totals
+cdc<-cdc %>%
+      group_by(Year, Chapter) %>%
+        mutate(N_Population = sum(Population),
+        N_Deaths = sum(Deaths), 
+        N_Crude_Rate = 10^5*(N_Deaths/N_Population)) %>% 
+          group_by(Year, Chapter, State) 
 ```
 
 
 
 ```{r}
 ui <- fluidPage(
-    titlePanel("Crude Mortality Rate Across All States Vs National Average"), 
+    titlePanel("State Vs National Average Crude Mortality"), 
     sidebarLayout( 
       sidebarPanel(
-        selectInput("choose state", label = strong("State"), 
+        selectInput("sel_state", label = strong("State"), 
                     choices = levels(as.factor(cdc$State)), 
                     selected = 1),
     
-        selectInput("Choose Cause of Death", label = strong("Cause of Death"), 
+        selectInput("sel_death", label = strong("Cause of Death"), 
                     choices = levels(as.factor(cdc$Chapter)), 
                     selected = 1),
 
@@ -197,32 +189,41 @@ ui <- fluidPage(
         ),
         
         mainPanel(
-            plotOutput("distPlot")
-        )
-    )
+          tabsetPanel(
+            tabPanel("Line Chart",plotOutput("distPlot")),
+            tabPanel("Bar-Line Chart",plotOutput("distPlot2"))
+          )
+        ),
+      position = c("left", "right"),
+      fluid = TRUE
+      )
     )
 
 
 server <- function(input, output) {
     output$distPlot <- renderPlot({
-        cdc %>% 
-            group_by(Year, Chapter) %>%
-            mutate(N_Population = sum(Population),
-                   N_Count = sum(Deaths), 
-                   N_Crude_Rate = 10^5*(N_Count/N_Population)) %>% 
-            group_by(Year, Chapter, State) %>%
-            mutate(S_Count=sum(Deaths),
-                   S_Crude_Rate=10^5*(S_Count/Population)) %>%
-            select(Chapter, State, Year, N_Crude_Rate, S_Crude_Rate) %>% 
-            filter(Chapter == input$select2, State == input$select1) %>% 
-            ggplot() +
-            geom_bar(aes(x = Year, weight = S_Crude_Rate)) +
-            labs(x = "State", y = "Crude Mortality Rate") + 
-            geom_line(aes(x = Year, y = N_Crude_Rate, linetype = "National Average"), col = "red", lwd = 1) +
-            scale_linetype(name = NULL) +
-            theme_minimal()
-        }
-    )
+        cdc %>%
+        select(Chapter, State, Year, N_Crude_Rate, Crude_Rate) %>% 
+          filter(Chapter == input$sel_death,
+                 State %in% c('National', input$sel_state)) %>%
+        ggplot(aes(x = Year)) +
+        geom_line(y = Crude_Rate) +
+        labs(y = 'Death rate per 100k') +
+        theme_minimal()
+        })
+    
+    output$distPlot2 <- renderPlot({
+      cdc %>% 
+        select(Chapter, State, Year, N_Crude_Rate, Crude_Rate) %>%
+        filter(Chapter == input$sel_death, State == input$sel_state) %>%
+        ggplot() +
+        geom_bar(aes(x = Year, weight = Crude_Rate)) +
+        labs(x = "State", y = "Crude Mortality Rate \n(State)") +
+        geom_line(aes(x = Year,
+                      y = N_Crude_Rate,
+                      linetype = "National\nCrude Mortality\nAverage Rate"),
+                      lwd = 2)
+      })
     }
 
 
