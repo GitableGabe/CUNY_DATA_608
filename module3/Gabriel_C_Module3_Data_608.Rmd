@@ -15,6 +15,7 @@ library(ggplot2)
 library(dplyr)
 library(shiny)
 library(kableExtra)
+library(rsconnect)
 ```
 
 # Module 3
@@ -205,9 +206,10 @@ server <- function(input, output) {
         cdc %>%
         select(Chapter, State, Year, N_Crude_Rate, Crude_Rate) %>% 
           filter(Chapter == input$sel_death,
-                 State %in% c('National', input$sel_state)) %>%
-        ggplot(aes(x = Year)) +
-        geom_line(y = Crude_Rate) +
+                 State ==input$sel_state) %>%
+        ggplot(aes(x = Year, y = Crude_Rate)) +
+        geom_line() +
+        geom_line(aes(x = Year, y = N_Crude_Rate)) +
         labs(y = 'Death rate per 100k') +
         theme_minimal()
         })
@@ -229,5 +231,6 @@ server <- function(input, output) {
 
 shinyApp(ui = ui, server = server)
 ```
+
 
 
