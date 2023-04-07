@@ -97,40 +97,44 @@
     </script>
 
     <!-- https://raw.githack.com/GitableGabe/CUNY_DATA_608/master/module5/index.html -->
-    
 
-    <h3>Intermediate:</h3>
+    <h2>Answer 2</h2>
+    <br>
+    <p>Enter a number : </p>
+    <!-- creates input box -->
+    <p>
+        <input type="num" id="number" />
+    </p>
+    <!-- end creates input box -->
+    <!-- creates button and on click call to function -->
+    <p>
+        <button onclick="multiples()">
+            multiples are:
+        </button>
+    </p>
+    <p id="mlt"></p>
 
-    <p>
-        This is one of two homework assignments you can complete for this week (you must do two,
-        you may do all three for extra credit). This is geared towards those of you who have have
-        worked with javascript before.
-    </p>
-    <p>
-        Your assignment should be in the form of an HTML page, which I will be able to run locally.
-        Refer to the file 'js_in_webpage.html' on the github page for instructions on setting up
-        javascript to run on an HTML page, and how to run/debug.
-    </p>
-    <br />
-    You should complete both of these in 2 (or more) functions on one HTML page
-    <br />
-    <ul style="list-style-type:disc">
-        <li>
-            Write a function to load the presidents.csv data and display the data as an html table
-            (you may use a cdv parser from any available library, though I encourage you to try
-            the d3 one).
-        </li>
-        <li>
-            Now that you have the presidents data loaded, write a function that will return that
-            president’s height & weight when you type it in. This can be typed into either an
-            input box or an alert box, and then print the result in a box or on the webpage.
-        </li>
-    </ul>
-    <p>
-        <b>Deployment:</b> Your apps from parts 1 and 2 must be deployed. There are a lot of
-        options for deploying javascript apps, however I would recommend using github pages.
-        Read more about how github pages work here: https://pages.github.com/
-    </p>
+    <!-- end creates button and on click call to function -->
+
 
 </body>
-</html>
+<script>
+    function multiples() {
+        var y = document.getElementById("number").value;
+        document.getElementById("mlt").innerHTML = calc(y);
+
+    }
+
+    function calc(z) {
+        var n =
+            "<table><tr><td>" + 1 * n + "</td><td>" + 2 * n + "</td><td>" + 3 * n + "</td><td>" + 4 * n +
+            "</td></tr><tr><td>" + 5 * n + "</td><td>" + 6 * n + "</td><td>" + 7 * n + "</td><td>" + 8 * n +
+            "</td></tr><tr><td>" + 9 * n + "</td><td>" + 10 * n + "</td><td>" + 11 * n + "</td><td>" + 12 * n +
+            "</td></tr><tr><td>" + 13 * n + "</td><td>" + 14 * n + "</td><td>" + 15 * n + "</td><td>" + 16 * n +
+            "</td></tr><tr><td>" + 17 * n + "</td><td>" + 18 * n + "</td><td>" + 19 * n + "</td><td>" + 20 * n +
+            "</td></tr></table>"
+        return (n)
+    }
+</script>
+
+<!-- https://raw.githack.com/GitableGabe/CUNY_DATA_608/master/module5/index.html -->
