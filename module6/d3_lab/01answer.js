@@ -2,11 +2,11 @@ d3.csv('ue_industry.csv', data => {
 
     // Define your scales and generator here.
     var x = d3.scaleLinear()
-        .domain(d3.extent(data, function (d) { return d.index; }))
+        .domain(d3.extent(data, d => +d.index))
         .range([20, 580]);
 
     var y = d3.scaleLinear()
-        .domain(d3.extent(data, function (d) { return d.Agriculture; }))
+        .domain(d3.extent(data, d => +d.Agriculture))
         .range([20, 580]);
 
     let line = d3.line()
