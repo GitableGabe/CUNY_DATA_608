@@ -10,8 +10,8 @@ d3.csv('ue_industry.csv', data => {
         .range([20, 580]);
 
     let line = d3.line()
-        .x(d => xScale(d.index))
-        .y(d => yScale(d.Agriculture));
+        .x(d => xScale(+d.index))
+        .y(d => yScale(+d.Agriculture));
 
     d3.select('#answer1')
         // append more elements here
