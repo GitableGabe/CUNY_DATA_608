@@ -10,6 +10,11 @@ d3.csv('ue_industry.csv', data => {
         .domain(d3.extent(data, d => +d.Agriculture))
         .range([580, 20]);
 
+
+    let line_q1 = d3.line()
+        .x(d => xScale(d.xScale))
+        .y(d => yScale(d.yScale))
+
     d3.select('#answer1')
     // append more elements here
     //    .selectAll('circle')
@@ -17,6 +22,7 @@ d3.csv('ue_industry.csv', data => {
     //    .enter()
     //    .append('circle')
         .attr('d', line(data))
+        .attr('stroke', '#2e2928')
 
 
     /*    .attr('r', d => 5)
