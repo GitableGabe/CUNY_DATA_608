@@ -1,5 +1,7 @@
 d3.csv('ue_industry.csv', data => {
 
+     // Define your scales and generator here.
+
     const xScale = d3.scaleLinear()
         .domain(d3.extent(data, d => +d.index))
         .range([20, 1180]);
@@ -9,12 +11,17 @@ d3.csv('ue_industry.csv', data => {
         .range([580, 20]);
 
     d3.select('#answer1')
-        .selectAll('circle')
+    // append more elements here
+    //    .selectAll('circle')
         .data(data)
-        .enter()
-        .append('circle')
-        .attr('r', d => 5)
+    //    .enter()
+    //    .append('circle')
+        .attr('d', line(data))
+
+
+    /*    .attr('r', d => 5)
         .attr('cx', d => xScale(d.index))
         .attr('cy', d => yScale(d.Agriculture));
+    */
 
 });
