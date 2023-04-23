@@ -28,7 +28,7 @@ d3.csv('ue_industry.csv', data => {
 
     const stackLayout = d3.stack()
         .keys(industries)
-        .offset(d3.stackOffsetExpand);
+        .offset(d3.stackOffsetWiggle);
         
     const stackArea = d3.area()
         .x((d, i) => xScale(i))
