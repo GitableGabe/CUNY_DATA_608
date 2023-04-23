@@ -12,8 +12,8 @@ d3.csv('ue_industry.csv', data => {
 
 
     let line_q1 = d3.line()
-        .x(d => d.xScale)
-        .y(d => d.yScale)
+        .x(d => xScale(d.x))
+        .y(d => yScale(d.y))
 
     d3.select('#answer1')
     // append more elements here
