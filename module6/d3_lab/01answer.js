@@ -17,7 +17,7 @@ d3.csv('ue_industry.csv', data => {
 
     d3.select('#answer1')
     // append more elements here
-        .selectAll('line')
+        .selectAll('circle')
         .data(data)
         .enter()
         .append('path')
