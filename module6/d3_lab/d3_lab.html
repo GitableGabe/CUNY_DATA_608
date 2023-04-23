@@ -437,7 +437,7 @@
 
             const stackLayout = d3.stack()
             .keys(industries)
-            .offset(d3.stackOffsetWiggle);
+            .offset(d3.stackOffsetExpand);
 
             const stackArea = d3.area()
             .x((d, i) => xScale(i))
