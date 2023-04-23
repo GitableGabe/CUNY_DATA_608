@@ -19,7 +19,7 @@ d3.csv('ue_industry.csv', data => {
     // append more elements here
     //    .selectAll('circle')
         .data(data)
-    //    .enter()
+        .enter()
         .append('path')
         .attr('d', line_q1(data))
         .attr('stroke', '#2e2928')
