@@ -44,4 +44,6 @@ d3.csv('ue_industry.csv', data => {
         .attr('class', d => 'path7')
         .style('fill', d => fillScale(d.key));
 
+    console.log('path7')
+
 });
