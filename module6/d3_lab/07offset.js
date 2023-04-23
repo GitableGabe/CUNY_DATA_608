@@ -19,7 +19,7 @@ d3.csv('ue_industry.csv', data => {
         .range([20, 1180]);
     
     const yScale = d3.scaleLinear()
-        .domain([0, totalYmax]).nice()
+        .domain([0, totalYmax])
         .range([580, 20]);
 
     const fillScale = d3.scaleOrdinal()
@@ -28,7 +28,7 @@ d3.csv('ue_industry.csv', data => {
 
     const stackLayout = d3.stack()
         .keys(industries)
-        .offset(d3.stackOffsetSilhouette);
+        .offset(d3.stackOffsetWiggle);
         
     const stackArea = d3.area()
         .x((d, i) => xScale(i))
