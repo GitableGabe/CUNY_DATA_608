@@ -208,6 +208,44 @@
 
     <img src=linegraph.jpg height="600px" width="1200px" />
 
+    <code>
+
+        d3.csv('ue_industry.csv', data => {
+
+        // Define your scales and generator here.
+
+        let xScale = d3.scaleLinear()
+        .domain(d3.extent(data, d => +d.index))
+        .range([20, 1180]);
+
+        let yScale = d3.scaleLinear()
+        .domain(d3.extent(data, d => +d.Agriculture))
+        .range([580, 20]);
+
+
+        let line_q1 = d3.line()
+        .x(d => xScale(+d.index))
+        .y(d => yScale(+d.Agriculture))
+
+        d3.select('#answer1')
+        // append more elements here
+        .selectAll('line')
+        .data(data)
+        .enter()
+        .append('path')
+        .attr('d', line_q1(data))
+        .attr('stroke', '#2e2928')
+
+
+        /*    .attr('r', d => 5)
+        .attr('cx', d => xScale(d.index))
+        .attr('cy', d => yScale(d.Agriculture));
+        */
+
+        });
+
+    </code>
+
     <div id="answer1div">
       <svg id="answer1" style="width:1200px;height:600px;"></svg>
     </div>
@@ -364,6 +402,59 @@
 
     <p>You may want to inspect what the data looks like. Try using <code>console.log</code> at any point in your code to print out the data. Then, enter developer mode, and see what prints out in the console.</p>
 
+    <code>
+
+        d3.csv('ue_industry.csv', data => {
+
+        const industries = ['Agriculture','Business services','Construction','Education and Health',
+        'Finance','Government','Information','Leisure and hospitality','Manufacturing',
+        'Mining and Extraction','Other','Self-employed','Transportation and Utilities',
+        'Wholesale and Retail Trade'];
+
+        const colors = ['#393b79', '#5253a3', '#6b6ecf', '#9c9ede', '#637939', '#8ca252', '#b5cf6b',
+        '#cedb9c', '#8b6d31', '#bd9e38', '#e7ba52', '#e7cb93', '#843c39', '#ad494a'];
+
+        const totalYmax = d3.sum(
+        industries.map(
+        d => d3.max(data, e => +e[d])
+        )
+        );
+
+        const xScale = d3.scaleLinear()
+        .domain(d3.extent(data, d => +d.index))
+        .range([20, 1180]);
+
+        const yScale = d3.scaleLinear()
+        .domain([0, totalYmax])
+        .range([580, 20]);
+
+        const fillScale = d3.scaleOrdinal()
+        .domain(industries)
+        .range(colors);
+
+        const stackLayout = d3.stack()
+        .keys(industries)
+        .offset(d3.stackOffsetWiggle);
+
+        const stackArea = d3.area()
+        .x((d, i) => xScale(i))
+        .y0(d => yScale(d[0]))
+        .y1(d => yScale(d[1]))
+        .curve(d3.curveBasis);
+
+        d3.select('#part7')
+        .selectAll('path')
+        .data(stackLayout(data))
+        .enter().append('path')
+        .attr('d', d => stackArea(d))
+        .attr('class', d => 'path7')
+        .style('fill', d => fillScale(d.key));
+
+        console.log('path7')
+
+        });
+
+    </code>
   </body>
 </html>
 
