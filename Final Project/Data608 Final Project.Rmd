@@ -1,0 +1,758 @@
+---
+title: "Data608 Final Project"
+output: html_notebook
+author: Gabriel Campos
+---
+
+# Final Project Proposal
+
+A major topic in local and national news has been the safety of residents and high rate of crime, in major cities in the United States. Depending which news outlet or political official is conducting the reporting, there are conflicting opinions on how bad crime has risen. Reporting often uses summarized and aggregated data to support sensationalized headlines, often meant to influence public opinion.
+
+![Local Headlines](R_image_proposal.png)
+
+As a constituent of one of the major cities in question, I believe it is important to have a broader understanding of the data points supporting these reports. Therefore, insight into the relationship between crime and safety, and the make-up of communities impacted by it, is one of personal and public importance.
+
+I wish to do this exploration of the crime/safety related data as a year over year comparison. The data available on NYC OpenData, Data.gov will influence date ranges I use for this comparison, as well as categories used to encompass “safety” in New York City (arrest, complaints, charges violations, etc). Zip codes, Boroughs and Municipals will be used to understand which section within New York is most impacted, data on demographics will be used to understand the makeup of those communities.
+
+I will also investigate public health violations and fines of business within these communities, as they relate directly to quality of life.
+
+
+
+```{r, echo=FALSE, warning=FALSE,message=FALSE}
+library(readr)
+library(dplyr)
+library(lubridate)
+library(openxlsx)
+library(reshape2)
+library(data.table)
+library(ggplot2)
+library(stringr)
+library(shiny)
+library(rsconnect)
+library(kableExtra)
+library(plotly)
+# library(readxl)
+```
+
+# Import data
+
+## URLs
+
+Considering the various sources I chose to save all urls used for importing, into variables with the naming convention `url_` and a description of the data content. This helps keep the code readable for easy tracking of work done.
+
+```{r}
+url_nypd_2023 <-"https://data.cityofnewyork.us/api/views/uip8-fykc/rows.csv?accessType=DOWNLOAD"
+url_311 <- "https://data.cityofnewyork.us/api/views/erm2-nwe9/rows.csv?accessType=DOWNLOAD"
+url_mv_collision <-"https://data.cityofnewyork.us/api/views/h9gi-nx95/rows.csv?accessType=DOWNLOAD"
+url_death_cause <- "https://data.cityofnewyork.us/api/views/jb7j-dtam/rows.csv?accessType=DOWNLOAD"
+```
+
+## read_csv & data cleanup
+
+The `read_csv` function from the `readr` package was used for csv specific imports. Most of the data sets are going to be filtered down to a subset, therefore the naming convention of `bg_` + descriptor was used for data sets that will both be subset and removed because of the sheer size. For example `bg_df_311` specifically, the data pull took roughly an hour, therefore the chunk in which the data was imported and filtered is commented out below, then exported as a csv for reuse and potential multiple runs.
+
+To address safety, the csv's that were of interest, included NYPD Arrests for 2023, 311 complaints, motor vehicle collisions, and cause of deaths records.
+
+```{r, include=FALSE}
+file_path_local <- "/Users/StanfordLee/Documents/Final\ Project\ Storage/Excel_files/311_Service_Requests_from_2010_to_Present_sub.csv"
+```
+
+```{r}
+#Code to retrieve 311 complaints from 2010 - 2022
+# filtered to Abuse, Illegal and Criminal descriptors and data 
+#range 2015 to 2022
+#written to a sub.csv
+
+# bg_df_311 <- read_csv(url_311)
+# df_311<-bg_df_311 %>%
+#   filter(`Complaint Type`=="Animal Abuse"|
+#          `Complaint Type`=="SAFETY"|
+#          `Complaint Type`=="Non-Emergency Police Matter"|
+#          `Complaint Type`=="Graffiti"|
+#          `Complaint Type`=="Other Enforcement"|
+#          `Complaint Type`=="Elder Abuse"|
+#          `Complaint Type`=="Illegal Fireworks"|
+#          `Complaint Type`=="Drug Activity"|
+#          `Complaint Type`=="Illegal Dumping"|
+#          `Complaint Type`=="Emergency Response Team (ERT)")
+# 
+# df_311$`Created Date` <- mdy_hms(df_311$`Created Date`)
+# df_311$`Created Date` <- as.Date(df_311$`Created Date`)
+# 
+# df_311 <- df_311%>%
+#             filter(`Created Date`>'2014-12-31' & `Created Date`<'2023-01-01')
+# write_csv(df_311, file_path_local)
+```
+
+Below are the csv pulls from its original url with the exception of the 311 sub csv locally stored.
+
+```{r, message=FALSE,warning=FALSE}
+df_nypd_2023 <- read_csv(url_nypd_2023)
+df_311 <- read_csv(file_path_local)
+bg_df_mv_collision <- read_csv(url_mv_collision)
+#bg_df_death_cause <- read_csv(url_death_cause) #NOT PURSUED B/C of TIME RESTRICTIONS
+```
+
+Date values for motor vehicle date and NYPD 2023 arrest dates were formatted as characters, therefore they were converted using `lubridate` package function [`mdy()`](https://lubridate.tidyverse.org/reference/ymd.html) before filtering by date, borough, count of injuries as shown in several columns, and specific community safety relating factor descriptors (e.g. "Alchohol Involvement")
+
+```{r}
+bg_df_mv_collision$`CRASH DATE` <- mdy(bg_df_mv_collision$`CRASH DATE`)
+df_nypd_2023$ARREST_DATE <- mdy(df_nypd_2023$ARREST_DATE)
+
+df_mv_collision <- bg_df_mv_collision %>%
+                          select(`CRASH DATE`,`BOROUGH`,`ZIP CODE`,`NUMBER OF PERSONS INJURED`,
+                                 `NUMBER OF PERSONS KILLED`,`NUMBER OF PEDESTRIANS INJURED`,
+                                 `NUMBER OF PEDESTRIANS KILLED`,`NUMBER OF CYCLIST INJURED`,
+                                 `NUMBER OF CYCLIST KILLED`,`NUMBER OF MOTORIST INJURED`,
+                                 `NUMBER OF MOTORIST KILLED`,`CONTRIBUTING FACTOR VEHICLE 1`,
+                                 `CONTRIBUTING FACTOR VEHICLE 2`)%>%
+                            filter(`CONTRIBUTING FACTOR VEHICLE 1`=="Aggressive Driving/Road Rage"|
+                                   `CONTRIBUTING FACTOR VEHICLE 1`=="Unsafe Speed"|
+                                   `CONTRIBUTING FACTOR VEHICLE 1`=="Alcohol Involvement"|
+                                   `CONTRIBUTING FACTOR VEHICLE 1`=="Drugs (illegal)"|
+                                   `CONTRIBUTING FACTOR VEHICLE 1`=="Drugs (Illegal)",
+                                    `CRASH DATE`>'2014-12-31')
+```
+
+Date value was reduced to and grouped by year, as well as borough and contributing factor, with casualty or injured tallies aggregated.
+
+```{r, message=FALSE}
+
+collision_cols <- c("YEAR","BOROUGH","CONTRIBUTING FACTOR VEHICLE 1")
+df_mv_collision<-df_mv_collision %>%
+  mutate(YEAR = format(`CRASH DATE`, "%Y")) %>%
+  select(YEAR,BOROUGH,`NUMBER OF PERSONS INJURED`,
+         `NUMBER OF PERSONS KILLED`,`NUMBER OF PEDESTRIANS INJURED`,
+         `NUMBER OF PEDESTRIANS KILLED`,`NUMBER OF CYCLIST INJURED`,
+         `NUMBER OF CYCLIST KILLED`,`NUMBER OF MOTORIST INJURED`,
+         `NUMBER OF MOTORIST KILLED`,`CONTRIBUTING FACTOR VEHICLE 1`)%>%
+  group_by(across(all_of(collision_cols))) %>%
+  summarise(across(everything(), sum))
+```
+
+```{r}
+col_311 <- c("Year","Agency Name","Complaint Type","Borough")
+
+df_311<-df_311 %>%
+  mutate(Year = format(`Created Date`, "%Y")) %>%
+  select(Year,`Agency Name`,`Complaint Type`,Borough)%>%
+  group_by(across(all_of(col_311))) %>%
+  summarise(total_count=n(),.groups='drop')%>%
+  as.data.frame()
+```
+
+
+Remove command used for reason as described above.
+
+```{r}
+rm(list=ls(pattern="^url"))
+rm(list=ls(pattern="^bg"))
+```
+
+## read.xlsx
+
+The `read.xlsx` function from the `openxlsx` package was used to import Excel files relating to historical arrest records dating back to 2015. The data was separated on [NYPD's NYC Parks Crime Stats Webpage](https://www.nyc.gov/site/nypd/stats/crime-statistics/park-crime-stats.page) into quarters per year. For the year over year use in my visualization the data was bound after it was cleaned and imported, making one unified data set. 
+
+* Conflicts with using this data included change in Metadata capitalization (e.g. Murder vs MURDER)
+* Value type mismatch
+
+Again URL's are stored as variables.
+
+## Parks Quarterly URL
+
+```{r}
+url_q4_2022 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q4-2022.xlsx"
+url_q3_2022 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q3-2022.xlsx"
+url_q2_2022 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q2-2022.xlsx"
+url_q1_2022 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q1-2022.xlsx"
+
+url_q4_2021 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q4-2021.xlsx"
+url_q3_2021 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q3-2021.xlsx"
+url_q2_2021 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q2-2021.xlsx"
+url_q1_2021 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q1-2021.xlsx"
+
+url_q4_2020 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q4-2020.xlsx"
+url_q3_2020 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q3-2020.xlsx"
+url_q2_2020 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q2-2020.xlsx"
+url_q1_2020 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q1-2020a.xlsx"
+
+url_q4_2019 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q4-2019.xlsx"
+url_q3_2019 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q3-2019.xlsx"
+url_q2_2019 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q2-2019.xlsx"
+url_q1_2019 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q1-2019.xlsx"
+
+url_q4_2018 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q4-2018.xlsx"
+url_q3_2018 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q3-2018.xlsx"
+url_q2_2018 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q2-2018.xlsx"
+url_q1_2018 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q1-2018.xlsx"
+
+url_q4_2017 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q4-2017.xlsx"
+url_q3_2017 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q3-2017.xlsx"
+url_q2_2017 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q2-2017.xlsx"
+url_q1_2017 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q1-2017.xlsx"
+
+url_q4_2016 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q4-2016.xlsx"
+url_q3_2016 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q3-2016.xlsx"
+url_q2_2016 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q2-2016.xlsx"
+url_q1_2016 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q1-2016.xlsx"
+
+url_q4_2015 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q4-2015.xlsx"
+url_q3_2015 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q3-2015.xlsx"
+url_q2_2015 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q2-2015.xlsx"
+url_q1_2015 <- "https://www.nyc.gov/assets/nypd/downloads/excel/crime_statistics/park-crime/nyc-park-crime-stats-q1-2015.xlsx"
+```
+
+Because the file extracts were excel, the data was anything but clean.
+* first rows of file had to be ignored to account for the double header each excel contained.
+* the last line for some files had a date allocated and to be reduced using head(data,-1).
+* counts for each crime as column values will be exported as character if all counts for that quarter and crime were subsequently all `0`
+* Conversion of all count columns were subsequently transformed to numeric using `as.numeric` for all related columns.
+
+```{r, warning=FALSE}
+# 2022 data in Quarters
+bg_df_park_q4_2022<- read.xlsx(url_q4_2022, startRow=4)
+bg_df_park_q3_2022<- read.xlsx(url_q3_2022, startRow=4)
+bg_df_park_q2_2022<- read.xlsx(url_q2_2022, startRow=4)
+bg_df_park_q1_2022<- read.xlsx(url_q1_2022, startRow=4)
+
+bg_df_park_q4_2022 = select(bg_df_park_q4_2022, -3:-4)
+bg_df_park_q3_2022 = select(bg_df_park_q3_2022, -3:-4)
+bg_df_park_q2_2022 = select(bg_df_park_q2_2022, -3:-4)
+bg_df_park_q1_2022 = select(bg_df_park_q1_2022, -3:-4)
+
+bg_df_park_q4_2022 <- bg_df_park_q4_2022 %>%
+    mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q3_2022 <- bg_df_park_q3_2022 %>%
+    mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q2_2022 <- bg_df_park_q2_2022 %>%
+    mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q1_2022 <- bg_df_park_q1_2022 %>% 
+    mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+
+
+# 2021 data in Quarters
+bg_df_park_q4_2021<- read.xlsx(url_q4_2021, startRow=4)
+bg_df_park_q3_2021<- read.xlsx(url_q3_2021, startRow=4)
+bg_df_park_q2_2021<- read.xlsx(url_q2_2021, startRow=4)
+bg_df_park_q1_2021<- read.xlsx(url_q1_2021, startRow=4)
+
+bg_df_park_q4_2021 = select(bg_df_park_q4_2021, -3:-4)
+bg_df_park_q3_2021 = select(bg_df_park_q3_2021, -3:-4)
+bg_df_park_q2_2021 = select(bg_df_park_q2_2021, -3:-4)
+bg_df_park_q1_2021 = select(bg_df_park_q1_2021, -3:-4)
+
+bg_df_park_q4_2021 <- head(bg_df_park_q4_2021,-1)
+bg_df_park_q3_2021 <- head(bg_df_park_q3_2021,-1)
+#bg_df_park_q2_2021 <- head(bg_df_park_q2_2021,-1)
+#bg_df_park_q1_2021 <- head(bg_df_park_q1_2021,-1)
+
+bg_df_park_q4_2021 <- bg_df_park_q4_2021 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q3_2021 <- bg_df_park_q3_2021 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q2_2021 <- bg_df_park_q2_2021 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q1_2021 <- bg_df_park_q1_2021 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+
+# 2020 data in Quarters
+bg_df_park_q4_2020<- read.xlsx(url_q4_2020, startRow=4)
+bg_df_park_q3_2020<- read.xlsx(url_q3_2020, startRow=4)
+bg_df_park_q2_2020<- read.xlsx(url_q2_2020, startRow=4)
+bg_df_park_q1_2020<- read.xlsx(url_q1_2020, startRow=4)
+
+bg_df_park_q4_2020 = select(bg_df_park_q4_2020, -3:-4)
+bg_df_park_q3_2020 = select(bg_df_park_q3_2020, -3:-4)
+bg_df_park_q2_2020 = select(bg_df_park_q2_2020, -3:-4)
+bg_df_park_q1_2020 = select(bg_df_park_q1_2020, -3:-4)
+
+bg_df_park_q4_2020 <- bg_df_park_q4_2020 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY',
+              'GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q3_2020 <- bg_df_park_q3_2020 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY',
+              'GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q2_2020 <- bg_df_park_q2_2020 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q1_2020 <- bg_df_park_q1_2020 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+# 2019 data in Quarters
+bg_df_park_q4_2019<- read.xlsx(url_q4_2019, startRow=4)
+bg_df_park_q3_2019<- read.xlsx(url_q3_2019, startRow=4)
+bg_df_park_q2_2019<- read.xlsx(url_q2_2019, startRow=4)
+bg_df_park_q1_2019<- read.xlsx(url_q1_2019, startRow=4)
+
+bg_df_park_q4_2019 = select(bg_df_park_q4_2019, -3:-4)
+bg_df_park_q3_2019 = select(bg_df_park_q3_2019, -3:-4)
+bg_df_park_q2_2019 = select(bg_df_park_q2_2019, -3:-4)
+bg_df_park_q1_2019 = select(bg_df_park_q1_2019, -3:-4)
+
+bg_df_park_q4_2019 <- bg_df_park_q4_2019 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+colnames(bg_df_park_q3_2019)[3]<-"MURDER"
+bg_df_park_q3_2019 <- bg_df_park_q3_2019 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+colnames(bg_df_park_q2_2019)[3]<-"MURDER"
+bg_df_park_q2_2019 <- bg_df_park_q2_2019 %>%
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+colnames(bg_df_park_q1_2019)[3]<-"MURDER"
+bg_df_park_q1_2019 <- bg_df_park_q1_2019 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+# 2018 data in Quarters
+bg_df_park_q4_2018<- read.xlsx(url_q4_2018, startRow=4)
+bg_df_park_q3_2018<- read.xlsx(url_q3_2018, startRow=4)
+bg_df_park_q2_2018<- read.xlsx(url_q2_2018, startRow=5)
+bg_df_park_q1_2018<- read.xlsx(url_q1_2018, startRow=4)
+
+bg_df_park_q4_2018 = select(bg_df_park_q4_2018, -3:-4)
+bg_df_park_q3_2018 = select(bg_df_park_q3_2018, -3:-4)
+bg_df_park_q2_2018 = select(bg_df_park_q2_2018, -3:-4)
+bg_df_park_q1_2018 = select(bg_df_park_q1_2018, -3:-4)
+
+
+
+bg_df_park_q4_2018 <- bg_df_park_q4_2018 %>%
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q3_2018 <- bg_df_park_q3_2018 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q2_2018 <- bg_df_park_q2_2018 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY',
+              'GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+colnames(bg_df_park_q1_2018)[3]<-"MURDER"
+bg_df_park_q1_2018 <- bg_df_park_q1_2018 %>%
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+# 2017 data in Quarters
+bg_df_park_q4_2017 <- read.xlsx(url_q4_2017, startRow=4)
+bg_df_park_q3_2017 <- read.xlsx(url_q3_2017, startRow=4)
+bg_df_park_q2_2017 <- read.xlsx(url_q2_2017, startRow=4)
+bg_df_park_q1_2017 <- read.xlsx(url_q1_2017, startRow=4)
+
+bg_df_park_q4_2017 = select(bg_df_park_q4_2017, -3:-4)
+bg_df_park_q3_2017 = select(bg_df_park_q3_2017, -3:-4)
+bg_df_park_q2_2017 = select(bg_df_park_q2_2017, -3:-4)
+bg_df_park_q1_2017 = select(bg_df_park_q1_2017, -3:-4)
+
+colnames(bg_df_park_q4_2017)[3]<-"MURDER"
+bg_df_park_q4_2017 <- bg_df_park_q4_2017 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q3_2017 <- bg_df_park_q3_2017 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY',
+              'GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              
+'TOTAL'), as.numeric)
+bg_df_park_q2_2017 <- bg_df_park_q2_2017 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q1_2017 <- bg_df_park_q1_2017 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+# 2016 data in Quarters
+bg_df_park_q4_2016 <- read.xlsx(url_q4_2016, startRow=4)
+bg_df_park_q3_2016 <- read.xlsx(url_q3_2016, startRow=4)
+bg_df_park_q2_2016 <- read.xlsx(url_q2_2016, startRow=4)
+bg_df_park_q1_2016 <- read.xlsx(url_q1_2016, startRow=4)
+
+bg_df_park_q4_2016 = select(bg_df_park_q4_2016, -3:-4)
+bg_df_park_q3_2016 = select(bg_df_park_q3_2016, -3:-4)
+bg_df_park_q2_2016 = select(bg_df_park_q2_2016, -3:-4)
+bg_df_park_q1_2016 = select(bg_df_park_q1_2016, -3:-4)
+
+bg_df_park_q4_2016 <- bg_df_park_q4_2016 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q3_2016 <- bg_df_park_q3_2016 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q2_2016 <- bg_df_park_q2_2016 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q1_2016 <- bg_df_park_q1_2016 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+# 2015 data in Quarters
+bg_df_park_q4_2015 <- read.xlsx(url_q4_2015, startRow=4)
+bg_df_park_q3_2015 <- read.xlsx(url_q3_2015, startRow=5)
+bg_df_park_q2_2015 <- read.xlsx(url_q2_2015, startRow=5)
+bg_df_park_q1_2015 <- read.xlsx(url_q1_2015, startRow=5)
+
+bg_df_park_q4_2015 = select(bg_df_park_q4_2015, -3:-4)
+bg_df_park_q3_2015 = select(bg_df_park_q3_2015, -3:-4)
+bg_df_park_q2_2015 = select(bg_df_park_q2_2015, -3:-4)
+bg_df_park_q1_2015 = select(bg_df_park_q1_2015, -3:-4)
+
+bg_df_park_q4_2015 <- bg_df_park_q4_2015 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+colnames(bg_df_park_q3_2015)[3]<-"MURDER"
+bg_df_park_q3_2015 <- bg_df_park_q3_2015 %>%
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q2_2015 <- bg_df_park_q2_2015 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+bg_df_park_q1_2015 <- bg_df_park_q1_2015 %>% 
+  mutate_at(c('MURDER','RAPE','ROBBERY','FELONY.ASSAULT',
+              'BURGLARY','GRAND.LARCENY','GRAND.LARCENY.OF.MOTOR.VEHICLE',
+              'TOTAL'), as.numeric)
+
+rm(list=ls(pattern="^url"))
+```
+
+## Row Bind
+
+Parks data separate into 28 data sets would not benefit my year over year analysis, therefore they were bounded to data frame  `df_park_crimes`
+
+```{r}
+# View(bg_df_park_q4_2015)
+# View(bg_df_park_q3_2015)
+# View(bg_df_park_q2_2015)
+# View(bg_df_park_q1_2015)
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+bg_df_park_2022 <-bind_rows(bg_df_park_q4_2022, bg_df_park_q3_2022,
+                            bg_df_park_q2_2022, bg_df_park_q1_2022)
+
+bg_df_park_2021 <-bind_rows(bg_df_park_q4_2021, bg_df_park_q3_2021,
+                  bg_df_park_q2_2021, bg_df_park_q1_2021)
+
+bg_df_park_2020 <-bind_rows(bg_df_park_q4_2020, bg_df_park_q3_2020,
+                  bg_df_park_q2_2020, bg_df_park_q1_2020)
+
+bg_df_park_2019 <-bind_rows(bg_df_park_q4_2019, bg_df_park_q3_2019,
+                  bg_df_park_q2_2019, bg_df_park_q1_2019)
+
+bg_df_park_2018 <-bind_rows(bg_df_park_q4_2018, bg_df_park_q3_2018,
+                  bg_df_park_q2_2018, bg_df_park_q1_2018)
+
+bg_df_park_2017 <-bind_rows(bg_df_park_q4_2017, bg_df_park_q3_2017,
+                  bg_df_park_q2_2017, bg_df_park_q1_2017)
+
+bg_df_park_2016 <-bind_rows(bg_df_park_q4_2016, bg_df_park_q3_2016,
+                  bg_df_park_q2_2016, bg_df_park_q1_2016)
+
+bg_df_park_2015 <-bind_rows(bg_df_park_q4_2015, bg_df_park_q3_2015,
+                  bg_df_park_q2_2015, bg_df_park_q1_2015)
+
+cols <- c("PARK","BOROUGH","YEAR")
+
+bg_df_park_2022$YEAR <- "2022"
+bg_df_park_2021$YEAR <- "2021"
+bg_df_park_2020$YEAR <- "2020"
+bg_df_park_2019$YEAR <- "2019"
+bg_df_park_2018$YEAR <- "2018"
+bg_df_park_2017$YEAR <- "2017"
+bg_df_park_2016$YEAR <- "2016"
+bg_df_park_2015$YEAR <- "2015"
+
+df_park_crimes<-bind_rows(bg_df_park_2022, bg_df_park_2021,
+                          bg_df_park_2020, bg_df_park_2019,
+                          bg_df_park_2018, bg_df_park_2017,
+                          bg_df_park_2016, bg_df_park_2015)
+
+df_park_crimes<-df_park_crimes %>%
+  group_by(across(all_of(cols))) %>%
+  summarise(across(everything(), sum))
+```
+
+
+```{r}
+str(df_park_crimes)
+```
+
+
+
+Again removing for sanity and I believe it impacts Rhistory and close time for Rstudios
+
+```{r}
+rm(list=ls(pattern="^url"))
+rm(list=ls(pattern="^bg"))
+rm(list=ls(pattern="^col"))
+rm(list=ls(pattern="cols$"))
+```
+
+Automatically populationg tables for review
+
+```{r}
+View(df_311)
+View(df_mv_collision)
+View(df_park_crimes)
+```
+
+The following are ggplot examples for `df_311` data.
+
+```{r}
+df_311%>%
+   filter(Year=='2015', Borough=='BRONX')%>%
+   ggplot(aes(Year, total_count, fill=`Complaint Type`))+
+            geom_bar(stat="identity", position = "dodge")+
+            scale_fill_brewer(palette = "Set3")
+```
+
+```{r, include=FALSE}
+# df_311%>%
+#   filter(Year==2015, Borough=='BRONX' | Borough == 'BROOKLYN')%>%
+#   ggplot(aes(Year, total_count, fill=`Complaint Type`))+
+#   geom_bar(stat="identity", position = "dodge")+
+#   scale_fill_brewer(palette = "Set3")
+```
+
+```{r, include=FALSE}
+# df_311%>%
+#   filter(Year==2015, Borough=='BRONX' |
+#            Borough == 'BROOKLYN'| Borough == 'QUEENS')%>%
+#   ggplot(aes(Year, total_count, fill=`Complaint Type`))+
+#   geom_bar(stat="identity", position = "dodge")+
+#   scale_fill_brewer(palette = "Set3")
+```
+
+
+
+```{r}
+require(shiny)
+
+############################# fluidPage #####################################
+ui <- fluidPage( 
+  sidebarLayout(
+    sidebarPanel(
+      
+        selectInput("start_year", label = strong("Start Year"),
+                     choices = levels(as.factor(c('2015','2016','2017',
+                                                  '2018','2019','2020',
+                                                  '2021','2022'))),
+                    selected = 1),
+        selectInput("end_year", label = strong("End Year"),
+                     choices = levels(as.factor(c('2015','2016','2017',
+                                                  '2018','2019','2020',
+                                                  '2021','2022'))),
+                    selected = 1),
+        selectizeInput(
+            inputId = "sel_boro",
+            label = strong("Borough"),
+            choices = c("BRONX","BROOKLYN","MANHATTAN","QUEENS",
+                        "STATEN ISLAND"),
+            selected = "BRONX",
+            multiple = TRUE,
+            options = list('plugins' = list('remove_button'),
+                           'create' = TRUE,
+                           'persist'= FALSE)
+            ),
+        selectizeInput(
+            inputId = "sel_complaint",
+            label = strong("Complaint Type"),
+            choices = levels(as.factor(df_311$`Complaint Type`)),
+            selected = "Animal Abuse",
+            multiple = TRUE,
+            options = list('plugins' = list('remove_button'),
+                           'create' = TRUE,
+                           'persist'= FALSE)
+            ),
+        selectizeInput(
+            inputId = "sel_vehicle",
+            label = strong("Contributing Factor"),
+            choices = levels(as.factor(df_mv_collision$`CONTRIBUTING FACTOR VEHICLE 1`)),
+            selected = "Alcohol Involvement",
+            multiple = TRUE,
+            options = list('plugins' = list('remove_button'),
+                           'create' = TRUE,
+                           'persist'= FALSE)
+            ),
+         selectizeInput(
+            inputId = "sel_park",
+            label = strong("Park"),
+            choices = as.vector(df_park_crimes$PARK),
+            multiple = TRUE,
+            options = list('plugins' = list('remove_button'),
+                           'create' = TRUE,
+                           'persist'= FALSE)
+            )
+
+    ),
+    
+  
+    
+############################# Main Page #####################################
+    mainPanel(
+      tabsetPanel(
+      tabPanel("311 Plot", plotlyOutput('distPlot311')),
+      tabPanel("311 Data Table", tableOutput('Table_311')),
+      tabPanel("Collision Data Table", tableOutput('Table_collision')),
+      tabPanel("Park Crimes Table", tableOutput('Table_parks'))
+      )
+    ),
+      position = c("left", "right"),
+      fluid = TRUE
+  )
+)
+
+############################# Server ##########################################
+server <- function(input, output, session) {
+
+  
+  ################################ 311 reactive ################################
+  # Unsure why model needed transformation but error without this step
+  model.data1 <- reactive ({
+    data.frame( df_311)
+    })
+  # Year range subset
+  model.time1 <- reactive ({
+    subset(model.data1(),Year>=input$start_year & Year<=input$end_year)
+  })
+  #First subset solely by borough using multi-select
+   model.boro1 <- reactive({
+    subset(model.time1(), Borough %in% input$sel_boro)
+     })
+   # Multi-select for 311 Complaint Type
+   model_311<- reactive({
+     subset(model.boro1(),  Complaint.Type %in% input$sel_complaint)
+     })
+
+  ########################## mv_collision reactive ###############################
+   # data frame instantiate
+   model.data2 <- reactive ({
+    data.frame( df_mv_collision)
+    })
+   # Year range subset
+  model.time2 <- reactive ({
+    subset(model.data2(),YEAR>=input$start_year & YEAR<=input$end_year)
+  })
+   #First subset solely by borough using multi-select
+   model.boro2 <- reactive({
+    subset(model.time2(), BOROUGH %in% input$sel_boro)
+     })
+    # Multi-select for Contributing.Factor.Vehicle.1
+   model_collision<- reactive({
+     subset(model.boro2(),  CONTRIBUTING.FACTOR.VEHICLE.1  %in% input$sel_vehicle)
+     })
+
+  ########################## parks reactive ###############################
+   # data frame instantiate
+   model.data3 <- reactive ({
+    data.frame(df_park_crimes)
+    })
+   # Year range subset
+  model.time3 <- reactive ({
+    subset(model.data3(),YEAR>=input$start_year & YEAR<=input$end_year)
+  })
+   #First subset solely by borough using multi-select
+   model.boro3 <- reactive({
+    subset(model.time3(), BOROUGH %in% input$sel_boro)
+     })
+    # Multi-select for Contributing.Factor.Vehicle.1
+   model_parks<- reactive({
+     subset(model.boro3(),  PARK  %in% input$sel_park)
+     })
+     
+  
+  ################################ 311 Table ##################################
+  output$Table_311 <- renderTable({ model_311() })
+  
+  plot_311<-reactive({
+    req(model_311())
+    model_311()%>%
+    ggplot(aes(Year, total_count, fill=`Complaint.Type`))+
+            geom_bar(stat="identity", position = "dodge")
+    })
+  
+  output$distPlot311 <- renderPlotly({
+    req(plot_311())
+    plot_311()
+  })
+  
+  ############################ Collision Table ##################################
+  output$Table_collision <- renderTable({ model_collision() })
+  
+  ############################ Parks Table ##################################
+  output$Table_parks <- renderTable({ model.time3() })
+  
+}
+
+runApp(shinyApp(ui,server))
+```
+
+
+
+
