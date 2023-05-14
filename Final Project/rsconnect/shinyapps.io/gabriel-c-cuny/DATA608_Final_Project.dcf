@@ -1,0 +1,14 @@
+name: DATA608_Final_Project
+title: DATA608_Final_Project
+username:
+account: gabriel-c-cuny
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 9102962
+bundleId: 7214704
+url: https://gabriel-c-cuny.shinyapps.io/DATA608_Final_Project/
+when: 1684017797.03263
+lastSyncTime: 1684017797.03266
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: Final Project Proposal.pdf|Final Project.pdf

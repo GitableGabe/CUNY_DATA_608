@@ -23,7 +23,7 @@ library(readr)
 library(dplyr)
 library(lubridate)
 library(openxlsx)
-library(reshape2)
+# library(reshape2)
 library(data.table)
 library(ggplot2)
 library(stringr)
@@ -31,6 +31,7 @@ library(shiny)
 library(rsconnect)
 library(kableExtra)
 library(plotly)
+# library(ms_drive)
 # library(readxl)
 ```
 
@@ -43,6 +44,7 @@ Considering the various sources I chose to save all urls used for importing, int
 ```{r}
 url_nypd_2023 <-"https://data.cityofnewyork.us/api/views/uip8-fykc/rows.csv?accessType=DOWNLOAD"
 url_311 <- "https://data.cityofnewyork.us/api/views/erm2-nwe9/rows.csv?accessType=DOWNLOAD"
+
 url_mv_collision <-"https://data.cityofnewyork.us/api/views/h9gi-nx95/rows.csv?accessType=DOWNLOAD"
 url_death_cause <- "https://data.cityofnewyork.us/api/views/jb7j-dtam/rows.csv?accessType=DOWNLOAD"
 ```
@@ -55,7 +57,14 @@ To address safety, the csv's that were of interest, included NYPD Arrests for 20
 
 ```{r, include=FALSE}
 file_path_local <- "/Users/StanfordLee/Documents/Final\ Project\ Storage/Excel_files/311_Service_Requests_from_2010_to_Present_sub.csv"
+
+url_311_sub <- "https://spsmailcuny-my.sharepoint.com/:x:/g/personal/gabriel_campos77_spsmail_cuny_edu/EZh3C2-xehVHulW58s4znLgBpa2BoRoEdr1QC4KNZJ9hRw?e=49AcWV"
 ```
+
+```{r}
+# mydrv <- get_personal_onedrive()
+```
+
 
 ```{r}
 #Code to retrieve 311 complaints from 2010 - 2022
@@ -63,24 +72,24 @@ file_path_local <- "/Users/StanfordLee/Documents/Final\ Project\ Storage/Excel_f
 #range 2015 to 2022
 #written to a sub.csv
 
-# bg_df_311 <- read_csv(url_311)
-# df_311<-bg_df_311 %>%
-#   filter(`Complaint Type`=="Animal Abuse"|
-#          `Complaint Type`=="SAFETY"|
-#          `Complaint Type`=="Non-Emergency Police Matter"|
-#          `Complaint Type`=="Graffiti"|
-#          `Complaint Type`=="Other Enforcement"|
-#          `Complaint Type`=="Elder Abuse"|
-#          `Complaint Type`=="Illegal Fireworks"|
-#          `Complaint Type`=="Drug Activity"|
-#          `Complaint Type`=="Illegal Dumping"|
-#          `Complaint Type`=="Emergency Response Team (ERT)")
-# 
-# df_311$`Created Date` <- mdy_hms(df_311$`Created Date`)
-# df_311$`Created Date` <- as.Date(df_311$`Created Date`)
-# 
-# df_311 <- df_311%>%
-#             filter(`Created Date`>'2014-12-31' & `Created Date`<'2023-01-01')
+bg_df_311 <- read_csv(url_311)
+df_311<-bg_df_311 %>%
+  filter(`Complaint Type`=="Animal Abuse"|
+         `Complaint Type`=="SAFETY"|
+         `Complaint Type`=="Non-Emergency Police Matter"|
+         `Complaint Type`=="Graffiti"|
+         `Complaint Type`=="Other Enforcement"|
+         `Complaint Type`=="Elder Abuse"|
+         `Complaint Type`=="Illegal Fireworks"|
+         `Complaint Type`=="Drug Activity"|
+         `Complaint Type`=="Illegal Dumping"|
+         `Complaint Type`=="Emergency Response Team (ERT)")
+
+df_311$`Created Date` <- mdy_hms(df_311$`Created Date`)
+df_311$`Created Date` <- as.Date(df_311$`Created Date`)
+
+df_311 <- df_311%>%
+            filter(`Created Date`>'2014-12-31' & `Created Date`<'2023-01-01')
 # write_csv(df_311, file_path_local)
 ```
 
@@ -88,7 +97,7 @@ Below are the csv pulls from its original url with the exception of the 311 sub 
 
 ```{r, message=FALSE,warning=FALSE}
 df_nypd_2023 <- read_csv(url_nypd_2023)
-df_311 <- read_csv(file_path_local)
+# df_311 <- read_csv(file_path_local)
 bg_df_mv_collision <- read_csv(url_mv_collision)
 #bg_df_death_cause <- read_csv(url_death_cause) #NOT PURSUED B/C of TIME RESTRICTIONS
 ```
@@ -536,11 +545,13 @@ df_park_crimes<-bind_rows(bg_df_park_2022, bg_df_park_2021,
 df_park_crimes<-df_park_crimes %>%
   group_by(across(all_of(cols))) %>%
   summarise(across(everything(), sum))
+
+df_park_crimes$BOROUGH<-trimws(df_park_crimes$BOROUGH)
 ```
 
 
 ```{r}
-str(df_park_crimes)
+#str(df_park_crimes)
 ```
 
 
@@ -589,10 +600,104 @@ df_311%>%
 #   scale_fill_brewer(palette = "Set3")
 ```
 
+```{r}
+# subset data ideally will be set by reactive in app
+df_mv_sub <- df_mv_collision%>%
+  filter(YEAR=='2015'|YEAR=='2016', BOROUGH=='BRONX' |
+           BOROUGH == 'BROOKLYN'|
+           BOROUGH == 'QUEENS',
+         `CONTRIBUTING FACTOR VEHICLE 1`=="Alcohol Involvement")
+
+#melted data that will also be created in reactive
+df_mv_melt <- data.table::melt(df_mv_sub[,c('YEAR',
+                   'NUMBER OF PERSONS INJURED',
+                   'NUMBER OF PERSONS KILLED',
+                   'NUMBER OF PEDESTRIANS INJURED',
+                   'NUMBER OF PEDESTRIANS KILLED',
+                   'NUMBER OF CYCLIST INJURED',
+                   'NUMBER OF CYCLIST KILLED',
+                   'NUMBER OF MOTORIST INJURED',
+                   'NUMBER OF MOTORIST KILLED')],id.vars = 1)
+# ggplot to display
+ggplot(df_mv_melt,aes(x = YEAR,y = value)) +
+    geom_bar(aes(fill = variable),
+             stat = "identity",
+             position = "dodge")+
+  facet_wrap(~ variable,
+             labeller = labeller(
+               groupwrap = label_wrap_gen(
+                 width=50,
+                 multi_line = TRUE)))+
+  geom_text(data = df_mv_melt %>%
+              group_by(YEAR, variable) %>%
+              summarise(Value = sum(value, na.rm = TRUE)),
+            aes(label = Value, x = YEAR, y = Value),
+            inherit.aes = FALSE,
+            vjust = 0.25, size = 2)+
+  theme(legend.text=ggplot2::element_text(size=5),
+                   legend.box.margin = margin(6, 6, 6, 6),
+                   legend.title=ggplot2::element_text(size=1.5*5,face="bold"),
+                   legend.position="bottom",
+                   legend.key.size = grid::unit(5/50, "inch"),
+                   legend.key.width = grid::unit(5/50, "inch"))
+  
+  
+  # theme(legend.position = "bottom",
+  #       legend.justification = c(1, 0))
+    
+```
 
 
 ```{r}
+# subset data ideally will be set by reactive in app
+df_park_sub <- df_park_crimes%>%
+  filter(YEAR=='2015'|YEAR=='2022', BOROUGH=='BRONX' |
+           BOROUGH == 'BROOKLYN'|
+           BOROUGH == 'QUEENS')
+
+#melted data that will also be created in reactive
+df_park_melt <- data.table::melt(df_park_sub[,
+                                         c('PARK',
+                                           'MURDER',
+                                           'RAPE',
+                                           'ROBBERY',
+                                           'FELONY.ASSAULT',
+                                           'BURGLARY',
+                                           'GRAND.LARCENY',
+                                           'GRAND.LARCENY.OF.MOTOR.VEHICLE',
+                                           'TOTAL')],
+                               id.vars = 1)
+# ggplot to display
+ggplot(df_park_melt,aes(x = PARK,y = value)) +
+    geom_bar(aes(fill = variable),
+             stat = "identity",
+             position = "dodge")
+# +
+#   geom_text(data = df_park_melt %>%
+#               group_by(YEAR, variable) %>%
+#               summarise(Value = sum(value, na.rm = TRUE)),
+#             aes(label = Value, x = YEAR, y = Value),
+#             inherit.aes = FALSE,
+#             vjust = 0.25, size = 2)+
+#   theme(legend.text=ggplot2::element_text(size=5),
+#                    legend.box.margin = margin(6, 6, 6, 6),
+#                    legend.title=ggplot2::element_text(size=1.5*5,face="bold"),
+#                    legend.position="bottom",
+#                    legend.key.size = grid::unit(5/50, "inch"),
+#                    legend.key.width = grid::unit(5/50, "inch"))
+
+
+  # theme(legend.position = "bottom",
+  #       legend.justification = c(1, 0))
+```
+
+
+
+
+
+```{r, warning=FALSE}
 require(shiny)
+
 
 ############################# fluidPage #####################################
 ui <- fluidPage( 
@@ -640,15 +745,8 @@ ui <- fluidPage(
                            'create' = TRUE,
                            'persist'= FALSE)
             ),
-         selectizeInput(
-            inputId = "sel_park",
-            label = strong("Park"),
-            choices = as.vector(df_park_crimes$PARK),
-            multiple = TRUE,
-            options = list('plugins' = list('remove_button'),
-                           'create' = TRUE,
-                           'persist'= FALSE)
-            )
+        uiOutput("selPark"),
+        width=3
 
     ),
     
@@ -659,7 +757,9 @@ ui <- fluidPage(
       tabsetPanel(
       tabPanel("311 Plot", plotlyOutput('distPlot311')),
       tabPanel("311 Data Table", tableOutput('Table_311')),
+      tabPanel("mv_collision Plot", plotlyOutput('dist_mv_collision')),
       tabPanel("Collision Data Table", tableOutput('Table_collision')),
+      tabPanel("Park Plot", plotlyOutput('dist_park')),
       tabPanel("Park Crimes Table", tableOutput('Table_parks'))
       )
     ),
@@ -696,44 +796,51 @@ server <- function(input, output, session) {
     data.frame( df_mv_collision)
     })
    # Year range subset
-  model.time2 <- reactive ({
+    model.time2 <- reactive ({
     subset(model.data2(),YEAR>=input$start_year & YEAR<=input$end_year)
-  })
+     })
    #First subset solely by borough using multi-select
    model.boro2 <- reactive({
     subset(model.time2(), BOROUGH %in% input$sel_boro)
      })
     # Multi-select for Contributing.Factor.Vehicle.1
    model_collision<- reactive({
-     subset(model.boro2(),  CONTRIBUTING.FACTOR.VEHICLE.1  %in% input$sel_vehicle)
+     subset(model.boro2(),
+            CONTRIBUTING.FACTOR.VEHICLE.1  %in% input$sel_vehicle)
      })
 
   ########################## parks reactive ###############################
-   # data frame instantiate
-   model.data3 <- reactive ({
-    data.frame(df_park_crimes)
+    # data frame instantiate
+    model.data3 <- reactive ({
+    data.frame( df_park_crimes)
     })
-   # Year range subset
-  model.time3 <- reactive ({
+    # Year range subset
+    model.time3 <- reactive ({
     subset(model.data3(),YEAR>=input$start_year & YEAR<=input$end_year)
-  })
-   #First subset solely by borough using multi-select
-   model.boro3 <- reactive({
+     }) 
+    #First subset solely by borough using multi-select
+    model.boro3 <- reactive({
     subset(model.time3(), BOROUGH %in% input$sel_boro)
-     })
-    # Multi-select for Contributing.Factor.Vehicle.1
-   model_parks<- reactive({
-     subset(model.boro3(),  PARK  %in% input$sel_park)
-     })
-     
-  
-  ################################ 311 Table ##################################
+    })
+    # Park values by borough and date
+    output$selPark <- renderUI({
+      selectInput(inputId = "sel_park",
+                  label = "Select Park:",
+                  choices = unique(model.boro3()$PARK), selected = NULL)
+      })
+    model_park <- reactive({
+    subset(model.boro3(), PARK== input$sel_park)
+    })
+    
+  ################################ 311 Table #################################
   output$Table_311 <- renderTable({ model_311() })
   
   plot_311<-reactive({
     req(model_311())
     model_311()%>%
-    ggplot(aes(Year, total_count, fill=`Complaint.Type`))+
+      group_by(Year,`Complaint.Type`)%>%
+      summarise(Total=sum(`total_count`),.groups = 'drop')%>%
+    ggplot(aes(Year, Total, fill=`Complaint.Type`))+
             geom_bar(stat="identity", position = "dodge")
     })
   
@@ -742,11 +849,90 @@ server <- function(input, output, session) {
     plot_311()
   })
   
-  ############################ Collision Table ##################################
+  ############################ Collision Table ###############################
   output$Table_collision <- renderTable({ model_collision() })
   
+  model_collision_melt<-reactive({
+    req(model_collision())
+    data.table::melt(model_collision()[,c('YEAR',
+                   'NUMBER.OF.PERSONS.INJURED',
+                   'NUMBER.OF.PERSONS.KILLED',
+                   'NUMBER.OF.PEDESTRIANS.INJURED',
+                   'NUMBER.OF.PEDESTRIANS.KILLED',
+                   'NUMBER.OF.CYCLIST.INJURED',
+                   'NUMBER.OF.CYCLIST.KILLED',
+                   'NUMBER.OF.MOTORIST.INJURED',
+                   'NUMBER.OF.MOTORIST.KILLED')],id.vars = 1)})
+  
+  plot_mv_collision<-reactive({
+    req(model_collision_melt())
+    # ggplot to display
+    model_collision_melt()%>%
+      group_by(YEAR,variable)%>%
+      summarise(Total_Count=sum(value),.groups = 'drop')%>%
+    ggplot(aes(x = YEAR,y = Total_Count)) +
+    geom_bar(aes(fill = variable),
+             stat = "identity",
+             position = "dodge")+
+      coord_flip()+
+      facet_wrap(~ variable,
+             labeller = labeller(
+               groupwrap = label_wrap_gen(
+                 width=50,
+                 multi_line = TRUE)))+
+      theme(legend.position="none")
+  })
+  
+  resized_gg<-reactive({
+    req(plot_mv_collision())
+    ggplotly(plot_mv_collision(), height=650) %>% layout(autosize=FALSE)
+  })
+  
+  output$dist_mv_collision <- renderPlotly({
+    req(resized_gg())
+    resized_gg()
+    # req(plot_mv_collision())
+    # plot_mv_collision()
+  })
+  
   ############################ Parks Table ##################################
-  output$Table_parks <- renderTable({ model.time3() })
+  output$Table_parks <- renderTable({
+    # plot_park_melt()
+    model_park()
+    # model.boro3()
+    })
+  
+  plot_park_melt<-reactive({
+    req(model_park())
+    data.table::melt(model_park()[,
+                                c('PARK',
+                                  'MURDER',
+                                  'RAPE',
+                                  'ROBBERY',
+                                  'FELONY.ASSAULT',
+                                  'BURGLARY',
+                                  'GRAND.LARCENY',
+                                  'GRAND.LARCENY.OF.MOTOR.VEHICLE',
+                                  'TOTAL')],
+                     id.vars = 1)
+    })
+
+  plot_park<-reactive({
+    req(plot_park_melt())
+      plot_park_melt()%>%
+        group_by(PARK,variable)%>%
+        summarise(Total_Count=sum(value),.groups = 'drop')%>%
+        filter(variable!="TOTAL")%>%
+        ggplot(aes(x = PARK,y = Total_Count)) +
+        geom_bar(aes(fill = variable),
+             stat = "identity",
+             position = position_dodge(preserve = "single"))
+  })
+  
+  output$dist_park <- renderPlotly({
+    req(plot_park())
+    plot_park()
+  })
   
 }
 
